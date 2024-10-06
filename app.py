@@ -2,60 +2,44 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import Input, Output, State, dcc, html
 import plotly.express as px
-import plotly.graph_objs as go
 import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+import plotly.graph_objs as go
 
-# Load the correlation data
-df_correlation = pd.read_csv("CountryCorrelationStats.csv")
+female_data = pd.read_csv('FemaleParticipationStats.csv')
+emission_data = pd.read_csv('EmissionStats.csv')
+correlation_data = pd.read_csv('CountryCorrelationStats.csv')
 
-# Load the Female Labour Force Participation data
-df_female_participation = pd.read_csv("FemaleParticipationStats.csv")
-
-# Load the CO2 Emission data
-df_emission = pd.read_csv("EmissionStats.csv")
-
-# Create the choropleth map using the correlation data
-fig = px.choropleth(
-    df_correlation,
-    locations="Code", 
-    color="CorrelationCoefficient",  
-    hover_name="CountryName",  
-    color_continuous_scale=px.colors.diverging.RdYlBu, 
-    range_color=(-1, 1)  
+# Create the base choropleth map
+choropleth_fig = px.choropleth(
+    correlation_data,
+    locations="Code",
+    color="CorrelationCoefficient",
+    hover_name="CountryName",
+    color_continuous_scale=px.colors.diverging.RdYlBu,
+    range_color=(-1, 1)
 )
 
 # Initialize the Dash app and set the external Bootstrap stylesheet
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-# Define the layout
 app.layout = dbc.Container(
     [
-        # Add the title at the top of the page
-        html.H1(
-            "Correlation between CO2 Emission and Female Labour Force Participation",
-            style={"text-align": "center", "margin-top": "20px", "margin-bottom": "20px"}
-        ),
-        
-        # The Choropleth Map
-        dcc.Graph(id="choropleth", figure=fig, style={"height": "60vh", "margin-left": "40px", "margin-right": "40px"}),
-
-        # Modal for displaying country details
+        html.H1("Correlation between CO2 Emission and Female Labour Force Participation",
+            style={"text-align": "center", "margin-top": "20px", "margin-bottom": "20px"}),
+        dcc.Graph(id="choropleth", figure=choropleth_fig, style={"height": "60vh"}),
         dbc.Modal(
             [
                 dbc.ModalHeader(dbc.ModalTitle(id="modal-title")),
-                dbc.ModalBody(
-                    [
-                        dcc.Graph(id="participation-graph"),
-                        dcc.Graph(id="emission-graph")
-                    ]
-                ),
+                dbc.ModalBody(id="modal-body"),
                 dbc.ModalFooter(
                     dbc.Button("Close", id="close-modal", className="ms-auto", n_clicks=0)
                 ),
             ],
             id="modal",
             is_open=False,
-            size="xl",  # Make the modal large enough to display both graphs
+            size="xl"
         ),
 
         html.P(
@@ -139,81 +123,99 @@ html.P(
     fluid=True,
 )
 
-# Callback to open the modal with country data and graphs when a country is clicked
+
 @app.callback(
     [Output("modal", "is_open"),
      Output("modal-title", "children"),
-     Output("participation-graph", "figure"),
-     Output("emission-graph", "figure")],
+     Output("modal-body", "children")],
     [Input("choropleth", "clickData"),
      Input("close-modal", "n_clicks")],
     [State("modal", "is_open")],
 )
+
+#gpt assisted code
 def toggle_modal(clickData, n_clicks_close, is_open):
     if n_clicks_close and is_open:
-        return False, "", go.Figure(), go.Figure()  # Close modal
+        return False, "", ""  
 
+    # If user clicks on a country in the choropleth
     if clickData:
-        country_code = clickData['points'][0]['location']
-        country_name = clickData['points'][0]['hovertext']
+        country_info = clickData['points'][0]
+        country_name = country_info['hovertext']
+        country_code = country_info['location']
         
-        # Filter Female Labour Participation data for the selected country
-        country_data_female = df_female_participation[
-            (df_female_participation['Code'] == country_code) & 
-            (df_female_participation['Year'] >= 1991) & 
-            (df_female_participation['Year'] <= 2022)
-        ]
 
-        # Create the plot for Female Labour Force Participation over time
-        participation_fig = go.Figure()
-        participation_fig.add_trace(go.Scatter(
-            x=country_data_female['Year'],
-            y=country_data_female['Value'],
-            mode='lines+markers',
-            name='Participation Rate'
-        ))
+        female_country_data = female_data[female_data['Code'] == country_code]
+        emission_country_data = emission_data[emission_data['Code'] == country_code]
 
-        # Customize the participation graph
-        participation_fig.update_layout(
-            title=f"Female Labour Force Participation in {country_name}",
-            xaxis_title="Year",
-            yaxis_title="Labour Force Participation Rate (%)",
-            yaxis=dict(range=[0, 100]),
-            xaxis=dict(range=[1991, 2022]),
-            height=400
+        # Merge the datasets on Year and ensure the lengths are the same
+        merged_data = pd.merge(
+            female_country_data[['Year', 'Value']],
+            emission_country_data[['Year', 'AnnualCO_Emissions']],
+            on='Year'
+        ).dropna()  
+
+        # Create the two 2D graphs (Female Participation and CO2 Emissions)
+        female_participation_fig = px.line(merged_data, x="Year", y="Value", title="Female Labour Force Participation")
+        emission_fig = px.line(merged_data, x="Year", y="AnnualCO_Emissions", title="CO2 Emissions")
+
+        # 3D Scatter Plot
+        years = merged_data['Year'].values
+        female_participation = merged_data['Value'].values
+        co2_emissions = merged_data['AnnualCO_Emissions'].values
+        
+        X = np.column_stack((years, female_participation))
+        X_poly = np.column_stack((X, years**2, female_participation**2, years*female_participation))
+        
+        # Fit a quadratic regression model
+        model = LinearRegression()
+        model.fit(X_poly, co2_emissions)
+        
+        # Generate predictions for the regression plane
+
+        #setup and calculate the higher degree regression model to get multivariable equation
+        #prompted AI assisted tool to setup 
+        year_grid, female_grid = np.meshgrid(np.linspace(years.min(), years.max(), 20), np.linspace(female_participation.min(), female_participation.max(), 20))
+        co2_fit = (
+            model.intercept_
+            + model.coef_[0] * year_grid
+            + model.coef_[1] * female_grid
+            + model.coef_[2] * (year_grid ** 2)
+            + model.coef_[3] * (female_grid ** 2)
+            + model.coef_[4] * (year_grid * female_grid)
         )
-
-        # Filter CO2 Emission data for the selected country
-        country_data_emission = df_emission[
-            (df_emission['Code'] == country_code) & 
-            (df_emission['Year'] >= 1991) & 
-            (df_emission['Year'] <= 2022)
-        ]
-
-        # Create the plot for CO2 Emissions over time
-        emission_fig = go.Figure()
-        emission_fig.add_trace(go.Scatter(
-            x=country_data_emission['Year'],
-            y=country_data_emission['AnnualCO_Emissions'],
-            mode='lines+markers',
-            name='CO2 Emissions'
-        ))
-
-        # Customize the emission graph
-        emission_fig.update_layout(
-            title=f"CO2 Emissions in {country_name}",
-            xaxis_title="Year",
-            yaxis_title="CO2 Emissions (tons)",
-            yaxis=dict(range=[country_data_emission['AnnualCO_Emissions'].min(), country_data_emission['AnnualCO_Emissions'].max()]),
-            xaxis=dict(range=[1991, 2022]),
-            height=400
+        
+        # Create 3D **Scatter** plot
+        scatter_3d_fig = go.Figure(data=[
+            go.Scatter3d(x=years, y=female_participation, z=co2_emissions, mode='markers', marker=dict(size=5)),
+            go.Surface(x=year_grid, y=female_grid, z=co2_fit, opacity=0.5)
+        ])
+        scatter_3d_fig.update_layout(
+            scene=dict(
+                xaxis_title='Year',
+                yaxis_title='Female Labour Force Participation (%)',
+                zaxis_title='CO2 Emissions (tons)',
+            ),
+            title="3D Scatter Plot of Year, Female Participation, and CO2 Emissions",
+            
         )
+        
+        # Combine all the graphs in the modal body
+        modal_body = html.Div([
+            dcc.Graph(figure=female_participation_fig),
+            dcc.Graph(figure=emission_fig),
+            html.P(f"For Z = CO2, X = Year, and Y = FemaleParticipation"),
+            html.P(f"Quadratic Regression Equation: z = {model.intercept_:.2f} + {model.coef_[0]:.2f}*y + {model.coef_[1]:.2f}*x + {model.coef_[2]:.2f}*y^2 + {model.coef_[3]:.2f}*x^2 + {model.coef_[4]:.2f}*x*y"),
+            dcc.Graph(figure=scatter_3d_fig)
+        ])
 
-        # Return the modal data
-        return True, f"Country: {country_name} (Code: {country_code})", participation_fig, emission_fig
+        # Modal title
+        title = f"Country: {country_name} (Code: {country_code})"
+        return True, title, modal_body  # Open modal with data
 
-    return is_open, "", go.Figure(), go.Figure()  # Keep modal state unchanged if no click
+    return is_open, "", ""  # Keep modal state unchanged
+### - gpt assisted code end for using ploty
 
-# Run the app
+
 if __name__ == '__main__':
     app.run_server(debug=True)
