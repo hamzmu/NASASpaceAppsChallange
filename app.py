@@ -144,7 +144,7 @@ def toggle_modal(clickData, n_clicks_close, is_open):
         country_name = country_info['hovertext']
         country_code = country_info['location']
         
-
+        # Filter data for the selected country
         female_country_data = female_data[female_data['Code'] == country_code]
         emission_country_data = emission_data[emission_data['Code'] == country_code]
 
@@ -155,9 +155,47 @@ def toggle_modal(clickData, n_clicks_close, is_open):
             on='Year'
         ).dropna()  
 
-        # Create the two 2D graphs (Female Participation and CO2 Emissions)
-        female_participation_fig = px.line(merged_data, x="Year", y="Value", title="Female Labour Force Participation")
-        emission_fig = px.line(merged_data, x="Year", y="AnnualCO_Emissions", title="CO2 Emissions")
+        # Create a combined figure with dual y-axes
+        combined_fig = go.Figure()
+
+        # Add the female participation line
+        combined_fig.add_trace(
+            go.Scatter(
+                x=merged_data['Year'],
+                y=merged_data['Value'],
+                name="Female Labour Force Participation",
+                mode='lines',
+                line=dict(color='blue'),
+                yaxis='y1'
+            )
+        )
+
+        # Add the CO2 emissions line (on the secondary y-axis)
+        combined_fig.add_trace(
+            go.Scatter(
+                x=merged_data['Year'],
+                y=merged_data['AnnualCO_Emissions'],
+                name="CO2 Emissions",
+                mode='lines',
+                line=dict(color='red'),
+                yaxis='y2'
+            )
+        )
+
+        # Update layout for dual y-axes
+        combined_fig.update_layout(
+            title="Female Labour Force Participation and CO2 Emissions",
+            xaxis_title="Year",
+            yaxis=dict(
+                title="Female Labour Force Participation (%)",
+                side='left'
+            ),
+            yaxis2=dict(
+                title="CO2 Emissions (tons)",
+                overlaying='y',
+                side='right'
+            )
+        )
 
         # 3D Scatter Plot
         years = merged_data['Year'].values
@@ -172,9 +210,6 @@ def toggle_modal(clickData, n_clicks_close, is_open):
         model.fit(X_poly, co2_emissions)
         
         # Generate predictions for the regression plane
-
-        #setup and calculate the higher degree regression model to get multivariable equation
-        #prompted AI assisted tool to setup 
         year_grid, female_grid = np.meshgrid(np.linspace(years.min(), years.max(), 20), np.linspace(female_participation.min(), female_participation.max(), 20))
         co2_fit = (
             model.intercept_
@@ -185,7 +220,7 @@ def toggle_modal(clickData, n_clicks_close, is_open):
             + model.coef_[4] * (year_grid * female_grid)
         )
         
-        # Create 3D **Scatter** plot
+        # Create 3D Scatter plot
         scatter_3d_fig = go.Figure(data=[
             go.Scatter3d(x=years, y=female_participation, z=co2_emissions, mode='markers', marker=dict(size=5)),
             go.Surface(x=year_grid, y=female_grid, z=co2_fit, opacity=0.5)
@@ -197,19 +232,17 @@ def toggle_modal(clickData, n_clicks_close, is_open):
                 zaxis_title='CO2 Emissions (tons)',
             ),
             title="3D Scatter Plot of Year, Female Participation, and CO2 Emissions",
-            
         )
         
         # Combine all the graphs in the modal body
         modal_body = html.Div([
-            html.P(f"For Z = CO2, X = Year, and Y = FemaleParticipation"),
+            html.P("For Z = CO2, X = Year, and Y = FemaleParticipation"),
             html.P(f"Quadratic Regression Equation: z = {model.intercept_:.2f} + {model.coef_[0]:.2f}y + {model.coef_[1]:.2f}x + {model.coef_[2]:.2f}y^2 + {model.coef_[3]:.2f}x^2 + {model.coef_[4]:.2f}xy"),
             dcc.Graph(
                 figure=scatter_3d_fig,
                 style={"height": "80vh"}  # Set a larger height for the 3D graph
-                ),
-            dcc.Graph(figure=female_participation_fig),
-            dcc.Graph(figure=emission_fig)
+            ),
+            dcc.Graph(figure=combined_fig)
         ])
 
         # Modal title
