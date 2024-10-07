@@ -202,11 +202,14 @@ def toggle_modal(clickData, n_clicks_close, is_open):
         
         # Combine all the graphs in the modal body
         modal_body = html.Div([
-            dcc.Graph(figure=female_participation_fig),
-            dcc.Graph(figure=emission_fig),
             html.P(f"For Z = CO2, X = Year, and Y = FemaleParticipation"),
-            html.P(f"Quadratic Regression Equation: z = {model.intercept_:.2f} + {model.coef_[0]:.2f}*y + {model.coef_[1]:.2f}*x + {model.coef_[2]:.2f}*y^2 + {model.coef_[3]:.2f}*x^2 + {model.coef_[4]:.2f}*x*y"),
-            dcc.Graph(figure=scatter_3d_fig)
+            html.P(f"Quadratic Regression Equation: z = {model.intercept_:.2f} + {model.coef_[0]:.2f}y + {model.coef_[1]:.2f}x + {model.coef_[2]:.2f}y^2 + {model.coef_[3]:.2f}x^2 + {model.coef_[4]:.2f}xy"),
+            dcc.Graph(
+                figure=scatter_3d_fig,
+                style={"height": "80vh"}  # Set a larger height for the 3D graph
+                ),
+            dcc.Graph(figure=female_participation_fig),
+            dcc.Graph(figure=emission_fig)
         ])
 
         # Modal title
